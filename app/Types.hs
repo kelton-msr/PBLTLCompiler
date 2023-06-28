@@ -36,7 +36,7 @@ data TLAForm = TBox TLAForm
              | TAnd TLAForm TLAForm 
              | TImplies TLAForm TLAForm 
              | TNeg TLAForm 
-             | TAssign TLAVal TLAVal 
+             | TEq TLAVal TLAVal 
              | TLeq TLAVal TLAVal 
              | TOr TLAForm TLAForm 
              | TBool Bool 
@@ -51,7 +51,7 @@ instance Show TLAForm where
     show (TOr l r)      = show l ++ " \\/ " ++ show r
     show (TImplies l r) = show l ++ " => "  ++ show r 
     show (TLeq l r)     = show l ++ " <= "  ++ show r 
-    show (TAssign l r)  = show l ++ "' = "  ++ show r
+    show (TEq l r)      = show l ++ " = "  ++ show r
     show (TVal t)       = show t
     show (TBool True)   = "TRUE"
     show (TBool False)  = "FALSE"

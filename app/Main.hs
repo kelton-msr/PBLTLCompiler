@@ -60,32 +60,32 @@ simplify f = f
 
 
 -- assumes pre-simplified formula
-compileCondition' :: LTLForm -> CompM TLAForm
-compileCondition' (LNeg f) = TNeg <$> compileCondition' f
-compileCondition' (LAtom s) = pure $ TVal $ TVar s
+compileProperty' :: LTLForm -> CompM TLAForm
+compileProperty' (LNeg f) = TNeg <$> compileProperty' f
+compileProperty' (LAtom s) = pure $ TVal $ TVar s
 -- This Formula vs Val stuff is becoming more trouble than it's worth... a refactor would be wise, but for now it works.
-compileCondition' (LOp s fs) =  TVal <$> TOp s <$> (mapM ((TForm <$>) . compileCondition')  fs)
-compileCondition' (LImplies l (LDiamond n r)) = do
+compileProperty' (LOp s fs) =  TVal <$> TOp s <$> (mapM ((TForm <$>) . compileProperty')  fs)
+compileProperty' (LImplies l (LDiamond n r)) = do
         m <- getAndUpdate
-        pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ truth m)
-compileCondition' (LImplies l r) = do
-        l' <- compileCondition' l
-        r' <- compileCondition' r
+        pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ condition m)
+compileProperty' (LImplies l r) = do
+        l' <- compileProperty' l
+        r' <- compileProperty' r
         pure $ l' `TImplies` r'
-compileCondition' (LAnd l r) = do
-    l' <- compileCondition' l
-    r' <- compileCondition' r
+compileProperty' (LAnd l r) = do
+    l' <- compileProperty' l
+    r' <- compileProperty' r
     pure $ l' `TAnd` r'
--- don't need what's inside here, that gets used when determining how `truth m` gets updated in compileNext'
-compileCondition' (LDiamond n _) = do
+-- don't need what's inside here, that gets used when determining how `condition m` gets updated in compileNext'
+compileProperty' (LDiamond n _) = do
     m <- getAndUpdate 
-    pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ truth m)
-compileCondition' (LBox s) = do
+    pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ condition m)
+compileProperty' (LBox s) = do
     if diamonds s > 0
         then 
-            compileCondition' s
+            compileProperty' s
         else do
-            r <- compileCondition' s
+            r <- compileProperty' s
             pure $ TBox r
 
 -- This feels too simple... probably something I'm missing...
@@ -103,7 +103,7 @@ compileInit' (LBox (LImplies l r)) = do
    l' <- compileInit' l 
    r' <- compileInit' r
    d <- get
-   pure $ (hasPredicate name `TAssign` (TForm $ compilePartialCondition l d)) : l' ++ r'
+   pure $ (hasPredicate name `TEq` (TForm $ compilePartialProperty l d)) : l' ++ r'
 compileInit' (LImplies l r) = do
    l' <- compileInit' l 
    r' <- compileInit' r
@@ -118,7 +118,7 @@ compileInit' (LDiamond _ f) = do
    d <- get
    r <- compileInit' f
    --TODO should this compilePartial advance the state?
-   pure $ [truth name `TAssign` (TForm $ compilePartialCondition f d), counter name `TAssign` TInt 0] ++ r
+   pure $ [condition name `TEq` (TForm $ compilePartialProperty f d), counter name `TEq` TInt 0] ++ r
 compileInit' (LBox f) = compileInit' f
 
 -- I think this is where most of the complexity is...
@@ -133,19 +133,19 @@ compileNext' (l `LAnd` r) = do
 compileNext' (LDiamond _ (LBox f)) = do
     d <- get
     name <- getAndUpdate
-    let t = compilePartialCondition f d
+    let t = compilePartialProperty f d
     f' <- compileNext' f
-    pure $ (truth name `TAssign` TForm t ) 
-            : (counter name `TAssign` (TIf (TNeg $ TVal $ truth name) (TInt 0) (counter name `TPlus` TInt 1)))
+    pure $ (condition name `TEq` TForm t ) 
+            : (counter name `TEq` (TIf (TNeg $ TVal $ condition name) (TInt 0) (counter name `TPlus` TInt 1)))
             : f'
 compileNext' (LDiamond _ f) = do
     d <- get
     --TODO do we update here?
     name <- getAndUpdate
-    let t = compilePartialCondition f d
+    let t = compilePartialProperty f d
     f' <- compileNext' f
-    pure $ (truth name `TAssign` TForm (t `TOr` (TVal $ truth name))) 
-            : (counter name `TAssign` (TIf (TNeg $ TVal $ truth name) (TInt 0) (counter name `TPlus` TInt 1)))
+    pure $ (condition name `TEq` TForm (t `TOr` (TVal $ condition name))) 
+            : (counter name `TEq` (TIf (TNeg $ TVal $ condition name) (TInt 0) (counter name `TPlus` TInt 1)))
             : f'
 compileNext'  (l `LImplies` r) = do
     l' <- compileNext' l
@@ -157,7 +157,7 @@ compileNext' (LBox (l `LImplies` r)) = do
     -- TODO messy. clean up.
     (names,i) <- get
     let name = names !! i
-    let q = compilePartialCondition l (names,i)
+    let q = compilePartialProperty l (names,i)
     l' <- compileNext' l
     if diamonds r == 0
         then do
@@ -166,17 +166,17 @@ compileNext' (LBox (l `LImplies` r)) = do
         else do
             dd <- get
             let p = case r of 
-                      LDiamond n (LBox f) -> compilePartialCondition f dd
-                      LDiamond n f -> compilePartialCondition f dd
+                      LDiamond n (LBox f) -> compilePartialProperty f dd
+                      LDiamond n f -> compilePartialProperty f dd
                       _ -> error $ "Diamonds must be at highest level in consequent. Simplification should have made this the case for " ++ show r
-            -- let p = compilePartialCondition r dd
-            let nexthasPredicate = (hasPredicate name `TAssign` TForm ((TVal $ hasPredicate name) `TOr` q)) 
-            let nextCounter  = counter name `TAssign` TIf (TNeg (TVal $ hasPredicate name)) 
+            -- let p = compilePartialProperty r dd
+            let nexthasPredicate = (hasPredicate name `TEq` TForm ((TVal $ hasPredicate name) `TOr` q)) 
+            let nextCounter  = counter name `TEq` TIf (TNeg (TVal $ hasPredicate name)) 
                         (TInt 0) 
                         -- TODO Probably should be a direct match instead of `boxes`. Would be a quick refactor, but let's get this done first...
                         (if boxes r > 0 then (counter name) `TPlus` TInt 1 
-                                        else (TIf ((TVal $ truth name) `TAnd` q ) (TInt 1) (counter name `TPlus` TInt 1)))
-            let nextT = truth name `TAssign` if boxes r > 0 then TForm p else TForm ((TVal $ truth name) `TOr` p)
+                                        else (TIf ((TVal $ condition name) `TAnd` q ) (TInt 1) (counter name `TPlus` TInt 1)))
+            let nextT = condition name `TEq` if boxes r > 0 then TForm p else TForm ((TVal $ condition name) `TOr` p)
             -- I think we do need to incorperate this for embedded implication.
             -- r' <- compileNext' r
             pure $ nexthasPredicate:nextCounter:[nextT]
@@ -187,10 +187,10 @@ compileNext' (LBox f) =
        else compileNext' f
 
 
-compilePartialCondition :: LTLForm -> ([String],Int) -> TLAForm
-compilePartialCondition f = fst . runState (compileCondition' f) 
-compileCondition :: LTLForm -> TLAForm
-compileCondition f = compilePartialCondition (simplify f) (names (simplify f),0)
+compilePartialProperty :: LTLForm -> ([String],Int) -> TLAForm
+compilePartialProperty f = fst . runState (compileProperty' f) 
+compileProperty :: LTLForm -> TLAForm
+compileProperty f = compilePartialProperty (simplify f) (names (simplify f),0)
 
 compileNext :: LTLForm -> [TLAForm]
 compileNext f = fst $ runState (compileNext' (simplify f)) (names (simplify f),0)
@@ -202,19 +202,19 @@ compileInit f = fst $ runState (compileInit' (simplify f)) (names (simplify f),0
 -- Which is useful for making compilation more modular and easier to reason about, but is not good TLA+.
 -- Here, we take all of these "bogus" assignments and turn them into one big assignment that is perhaps long and ugly, but should work.
 
-collateAssignments :: [TLAForm] -> TLAForm
-collateAssignments fs = collateAssignments' fs Map.empty
+collateAssignments :: String -> [TLAForm] -> TLAForm
+collateAssignments c fs = collateAssignments' c fs Map.empty
 
-collateAssignments' :: [TLAForm] -> Map String [(String,TLAVal)] -> TLAForm
-collateAssignments' (((TApp (TApp (TVar "c") s) l) `TAssign` r):fs) m = collateAssignments' fs (Map.insertWith (++) s [(l,r)] m) 
-collateAssignments' (x:_) _ = error $ "Something has gone wrong. Saw " ++ show x ++ " in collateAssignents"
-collateAssignments' [] m = TVar "c" `TAssign` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)
+collateAssignments' :: String -> [TLAForm] -> Map String [(String,TLAVal)] -> TLAForm
+collateAssignments' c (((TApp (TApp (TVar "c") s) l) `TEq` r):fs) m = collateAssignments' c fs (Map.insertWith (++) s [(l,r)] m) 
+collateAssignments' c (x:_) _ = error $ "Something has gone wrong. Saw " ++ show x ++ " in collateAssignents"
+collateAssignments' c [] m = TVar c `TEq` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)
 
 -- helpers..
 counter :: String -> TLAVal 
 counter s = (TApp (TApp (TVar "c") s) "counter")
-truth :: String -> TLAVal
-truth s = TApp (TApp (TVar "c") s) "t"
+condition :: String -> TLAVal
+condition s = TApp (TApp (TVar "c") s) "condition"
 hasPredicate :: String -> TLAVal
 hasPredicate s = TApp (TApp (TVar "c") s) "hasPredicate"
 
@@ -260,11 +260,10 @@ main :: IO ()
 main = do
     args <- getArgs
     form <- if null args then parseString =<< getContents else parseString =<< (readFile $ head args)
-    putStrLn  "Condition:"
-    print $ compileCondition form
+    putStrLn  "Property:"
+    print $ compileProperty form
     putStrLn  "NextP:"
-    print $ collateAssignments $ compileNext form
-    --This should not be primed, that's a bug. TODO.
+    print $ collateAssignments "c'" $ compileNext form
     putStrLn  "InitP:"
-    print $ collateAssignments $ compileInit form
+    print $ collateAssignments "c" $ compileInit form
     pure ()

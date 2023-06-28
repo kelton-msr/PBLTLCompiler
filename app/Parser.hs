@@ -79,7 +79,7 @@ parseOp = do
     case f of
       Just e -> do 
           fs <- many (L.symbol space "," >> parseLTL)
-          symbol "(" 
+          symbol ")" 
           pure $ LOp id (e:fs)
       Nothing -> do 
           symbol ")" 
