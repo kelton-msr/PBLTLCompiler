@@ -39,7 +39,6 @@ data TLAForm = TBox TLAForm
              | TEq TLAVal TLAVal 
              | TLeq TLAVal TLAVal 
              | TOr TLAForm TLAForm 
-             | TBool Bool 
              | TVal TLAVal 
     deriving Eq
 
@@ -47,24 +46,25 @@ instance Show TLAForm where
     show (TBox a)       = "[](" ++ show a ++ ")"
     show (TDiamond a)   = "<>(" ++ show a ++ ")"
     show (TNeg a)       = "~("  ++ show a ++ ")"
-    show (TAnd l r)     = show l ++ " /\\ " ++ show r
-    show (TOr l r)      = show l ++ " \\/ " ++ show r
-    show (TImplies l r) = show l ++ " => "  ++ show r 
+    show (TAnd l r)     = "(" ++ show l ++ " /\\ " ++ show r ++ ")"
+    show (TOr l r)      = "(" ++ show l ++ " \\/ " ++ show r ++ ")"
+    show (TImplies l r) = "(" ++ show l ++ " => "  ++ show r  ++ ")"
     show (TLeq l r)     = show l ++ " <= "  ++ show r 
     show (TEq l r)      = show l ++ " = "  ++ show r
     show (TVal t)       = show t
-    show (TBool True)   = "TRUE"
-    show (TBool False)  = "FALSE"
 
 -- The distinction between value and formula is more to limit bugs while writing than something principled
 -- This could easily be moved into the TLAForm type later
 data TLAVal = TInt Int 
+            | TBool Bool
             | TFunc [(String,TLAVal)] 
             | TForm TLAForm 
             | TIf TLAForm TLAVal TLAVal 
             | TPlus TLAVal TLAVal
             | TVar String
             | TOp String [TLAVal]
+            | TString String
+            | TSeq [TLAVal]
             -- Only one that might not be self explanitory -- this is an application of a TLA+ function to a key.
             -- e.g (TApp (TVar "c") "foo") = c["foo"]
             | TApp TLAVal String 
@@ -77,5 +77,9 @@ instance Show TLAVal where
     show (TApp v s)  = show v ++ "[\"" ++ s ++ "\"]"
     show (TPlus v s) = "(" ++ show v ++ " + " ++ show s ++ ")"
     show (TVar s)    = s
-    show (TOp s fs)  = s ++ "(" ++ (concat $ intersperse "," $ map show fs) ++ ")"
-    show (TFunc vs)   = "[" ++ (concat $ intersperse "," $ map (\(n,v) -> n ++ "|-> " ++ show v) vs)  ++ "]"
+    show (TOp s fs)  = s ++ "(" ++ (concat $ intersperse ", " $ map show fs) ++ ")"
+    show (TFunc vs)  = "[" ++ (concat $ intersperse ", " $ map (\(n,v) -> n ++ "|-> " ++ show v) vs)  ++ "]"
+    show (TSeq l)    = "<<" ++ (concat $ intersperse ", " $ map show l ) ++ ">>"
+    show (TString s) = "\"" ++ s ++ "\""
+    show (TBool True)   = "TRUE"
+    show (TBool False)  = "FALSE"

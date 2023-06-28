@@ -19,6 +19,13 @@ import qualified Data.Map.Strict as Map
 -- 3. There is no way to express the probability check on the outside within a TLA+ formula.
 -- That needs to be handled seperately.
 
+-- things that ought be arguments soon
+csvFile :: String
+csvFile = "statPropsRes.csv"
+
+c :: String
+c = "c"
+
 -- For a bit more details on PBLTL, see the readme.
 
 -- Counts the number of (bounded) diamonds in a formula.
@@ -198,17 +205,28 @@ compileNext f = fst $ runState (compileNext' (simplify f)) (names (simplify f),0
 compileInit :: LTLForm -> [TLAForm]
 compileInit f = fst $ runState (compileInit' (simplify f)) (names (simplify f),0)
 
+
+-- should work for most properties. Won't work if there is more than just the one box on the outside. 
+-- normally would not need to be made into an invariant, but needs to to deal with a TLC bug
+propertyToCSVInvariant :: TLAForm -> TLAForm
+propertyToCSVInvariant (TBox f) = 
+    ((TNeg f) `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) `TImplies` 
+        ((TVal $ TOp "CSVWrite" [TString "%1$s",TSeq [TBool True],TString csvFile]) `TAnd` (TVar "hasEmittedCSV'" `TEq` (TBool True)))
+propertyToCSVInvariant f = 
+    ((TNeg f) `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) `TImplies` 
+        ((TVal $ TOp "CSVWrite" [TString "%1$s", TSeq [TBool True],TString csvFile]) `TAnd` (TVar "hasEmittedCSV'" `TEq` (TBool True)))
+
 -- How i've been thinking about setting/updating counters during Next and Init was very much of the form c["blah"]["counter"]' = ...
 -- Which is useful for making compilation more modular and easier to reason about, but is not good TLA+.
 -- Here, we take all of these "bogus" assignments and turn them into one big assignment that is perhaps long and ugly, but should work.
 
 collateAssignments :: String -> [TLAForm] -> TLAForm
-collateAssignments c fs = collateAssignments' c fs Map.empty
+collateAssignments var fs = collateAssignments' var fs Map.empty
 
 collateAssignments' :: String -> [TLAForm] -> Map String [(String,TLAVal)] -> TLAForm
-collateAssignments' c (((TApp (TApp (TVar "c") s) l) `TEq` r):fs) m = collateAssignments' c fs (Map.insertWith (++) s [(l,r)] m) 
-collateAssignments' c (x:_) _ = error $ "Something has gone wrong. Saw " ++ show x ++ " in collateAssignents"
-collateAssignments' c [] m = TVar c `TEq` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)
+collateAssignments' var (((TApp (TApp (TVar "c") s) l) `TEq` r):fs) m = collateAssignments' var fs (Map.insertWith (++) s [(l,r)] m) 
+collateAssignments' var (x:_) _ = error $ "Something has gone wrong. Saw " ++ show x ++ " in collateAssignents"
+collateAssignments' var [] m = TVar var `TEq` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)
 
 -- helpers..
 counter :: String -> TLAVal 
@@ -247,23 +265,28 @@ d3 :: LTLForm
 d3 = LDiamond 25 $ LDiamond 20 $ LAtom "p"
 d4 :: LTLForm
 d4 = LAtom "q" `LImplies` (LDiamond 20 $ LAtom "r")
--- Much more to do here with actually getting this more cohesive, but right now just print each TLA+ Formula to console.
--- Need to still emit the addition of the variables and the fairness constraint (should just be WF_(NextP)? Have not thought that part out in depth)
 
---parseString :: String -> Either (ParseErrorBundle String String) LTLForm
 parseString :: String -> IO LTLForm
 parseString input = 
     case parse parseLTL "(PBLTL formula)" input of
-      Left e -> ioError (userError $ "failed to parse with error " ++ show e)
+      --These error messages are borderline worthless. I think megaparsec has a way to improve them. TODO.
+      Left e -> ioError (userError $ "failed to parse with error: " ++ show e)
       Right f -> pure f
+
+-- Much more to do here with actually getting this more cohesive, but right now just print each TLA+ Formula to console.
+-- Fairness I think depends on how it's done in the original spec. Should just keep working if it's just WF_v(Next),
+-- but would need to handled seperately if each action is done seperately by (adding WF_v(NextP))
 main :: IO ()
 main = do
     args <- getArgs
     form <- if null args then parseString =<< getContents else parseString =<< (readFile $ head args)
-    putStrLn  "Property:"
-    print $ compileProperty form
-    putStrLn  "NextP:"
-    print $ collateAssignments "c'" $ compileNext form
-    putStrLn  "InitP:"
-    print $ collateAssignments "c" $ compileInit form
+    putStrLn $ "VARIABLES hasEmittedCSV, " ++ c
+    putStrLn  "Property == "
+    putStrLn $ "    " ++ (show $ compileProperty form)
+    putStrLn  "Invariant == "
+    putStrLn $ "    " ++ (show $ propertyToCSVInvariant $ compileProperty form)
+    putStrLn  "NextP == "
+    putStrLn $ "    " ++ (show $ collateAssignments (c ++ "'") $ compileNext form)
+    putStrLn  "InitP == "
+    putStrLn $ "    " ++ (show $ collateAssignments c $ compileInit form)
     pure ()
