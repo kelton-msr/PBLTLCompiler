@@ -36,6 +36,7 @@ parseLTL =
     <|> try parseImplies
     <|> try parseOp
     <|> parseVar
+    <|> parens parseLTL 
 
 parseBox :: Parser LTLForm
 parseBox = L.symbol space "[]" >> LBox <$> parseLTL

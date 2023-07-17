@@ -110,7 +110,7 @@ compileInit' (LBox (LImplies l r)) = do
    l' <- compileInit' l 
    r' <- compileInit' r
    d <- get
-   pure $ (hasPredicate name `TEq` (TForm $ compilePartialProperty l d)) : l' ++ r'
+   pure $ (hasAntecedent name `TEq` (TForm $ compilePartialProperty l d)) : l' ++ r'
 compileInit' (LImplies l r) = do
    l' <- compileInit' l 
    r' <- compileInit' r
@@ -120,6 +120,12 @@ compileInit' (LImplies l r) = do
     --    then compileInit' r
        -- else do 
 -- not thought in too much detail for composit formulas
+compileInit' (LDiamond _ (LBox f)) = do
+   name <- getAndUpdate
+   d <- get
+   r <- compileInit' f
+   --TODO should this compilePartial advance the state?
+   pure $ [condition name `TEq` (TForm $ compilePartialProperty f d), counter name `TEq` TInt 0] ++ r
 compileInit' (LDiamond _ f) = do
    name <- getAndUpdate
    d <- get
@@ -177,8 +183,8 @@ compileNext' (LBox (l `LImplies` r)) = do
                       LDiamond n f -> compilePartialProperty f dd
                       _ -> error $ "Diamonds must be at highest level in consequent. Simplification should have made this the case for " ++ show r
             -- let p = compilePartialProperty r dd
-            let nexthasPredicate = (hasPredicate name `TEq` TForm ((TVal $ hasPredicate name) `TOr` q)) 
-            let nextCounter  = counter name `TEq` TIf (TNeg (TVal $ hasPredicate name)) 
+            let nexthasAntecedent = (hasAntecedent name `TEq` TForm ((TVal $ hasAntecedent name) `TOr` q)) 
+            let nextCounter  = counter name `TEq` TIf (TNeg (TVal $ hasAntecedent name)) 
                         (TInt 0) 
                         -- TODO Probably should be a direct match instead of `boxes`. Would be a quick refactor, but let's get this done first...
                         (if boxes r > 0 then (counter name) `TPlus` TInt 1 
@@ -186,7 +192,7 @@ compileNext' (LBox (l `LImplies` r)) = do
             let nextT = condition name `TEq` if boxes r > 0 then TForm p else TForm ((TVal $ condition name) `TOr` p)
             -- I think we do need to incorperate this for embedded implication.
             -- r' <- compileNext' r
-            pure $ nexthasPredicate:nextCounter:[nextT]
+            pure $ nexthasAntecedent:nextCounter:[nextT]
 compileNext' (LNeg f) = compileNext' f
 compileNext' (LBox f) =
     if diamonds f == 0 
@@ -202,39 +208,45 @@ compileProperty f = compilePartialProperty (simplify f) (names (simplify f),0)
 compileNext :: LTLForm -> [TLAForm]
 compileNext f = fst $ runState (compileNext' (simplify f)) (names (simplify f),0)
 
+-- bug with boxes TODO
+-- hasEmitted nees to be specified in next, and init
 compileInit :: LTLForm -> [TLAForm]
-compileInit f = fst $ runState (compileInit' (simplify f)) (names (simplify f),0)
+compileInit f = (TVar "hasEmittedCSV" `TEq` TBool False) : (fst $ runState (compileInit' (simplify f)) (names (simplify f),0))
 
 
 -- should work for most properties. Won't work if there is more than just the one box on the outside. 
 -- normally would not need to be made into an invariant, but needs to to deal with a TLC bug
-propertyToCSVInvariant :: TLAForm -> TLAForm
-propertyToCSVInvariant (TBox f) = 
-    ((TNeg f) `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) `TImplies` 
-        ((TVal $ TOp "CSVWrite" [TString "%1$s",TSeq [TBool True],TString csvFile]) `TAnd` (TVar "hasEmittedCSV'" `TEq` (TBool True)))
-propertyToCSVInvariant f = 
-    ((TNeg f) `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) `TImplies` 
-        ((TVal $ TOp "CSVWrite" [TString "%1$s", TSeq [TBool True],TString csvFile]) `TAnd` (TVar "hasEmittedCSV'" `TEq` (TBool True)))
+propertyToCSVNext :: TLAForm -> [TLAForm]
+propertyToCSVNext (TBox f) = propertyToCSVNext f
+-- old impl. Doesn't quite work with how TLA+ does.
+-- propertyToCSVNext f = 
+--     ((TNeg f) `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) `TImplies` 
+--         ((TVal $ TOp "CSVWrite" [TString "%1$s",TSeq [TBool True],TString csvFile]) `TAnd` (TVar "hasEmittedCSV'" `TEq` (TBool True)))
+propertyToCSVNext f = 
+         (TVar "hasEmittedCSV'" `TEq` TForm (TNeg f)) : 
+            TVal (TIf ((TVal $ TVar "hasEmittedCSV'") `TAnd` (TNeg $ TVal $ TVar "hasEmittedCSV")) writeCSV (TBool True)) : []
+writeCSV :: TLAVal
+writeCSV = 
+          TOp "CSVWrite" [TString "%1$s",TSeq [TBool True],TString csvFile]
 
 -- How i've been thinking about setting/updating counters during Next and Init was very much of the form c["blah"]["counter"]' = ...
 -- Which is useful for making compilation more modular and easier to reason about, but is not good TLA+.
 -- Here, we take all of these "bogus" assignments and turn them into one big assignment that is perhaps long and ugly, but should work.
-
-collateAssignments :: String -> [TLAForm] -> TLAForm
+collateAssignments :: String -> [TLAForm] -> [TLAForm]
 collateAssignments var fs = collateAssignments' var fs Map.empty
 
-collateAssignments' :: String -> [TLAForm] -> Map String [(String,TLAVal)] -> TLAForm
+collateAssignments' :: String -> [TLAForm] -> Map String [(String,TLAVal)] -> [TLAForm]
 collateAssignments' var (((TApp (TApp (TVar "c") s) l) `TEq` r):fs) m = collateAssignments' var fs (Map.insertWith (++) s [(l,r)] m) 
-collateAssignments' var (x:_) _ = error $ "Something has gone wrong. Saw " ++ show x ++ " in collateAssignents"
-collateAssignments' var [] m = TVar var `TEq` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)
+collateAssignments' var (h:t) m = h : collateAssignments' var t m
+collateAssignments' var [] m = [TVar var `TEq` (TFunc $ map (\(n,v) -> (n, TFunc v)) $ Map.assocs m)]
 
 -- helpers..
 counter :: String -> TLAVal 
 counter s = (TApp (TApp (TVar "c") s) "counter")
 condition :: String -> TLAVal
 condition s = TApp (TApp (TVar "c") s) "condition"
-hasPredicate :: String -> TLAVal
-hasPredicate s = TApp (TApp (TVar "c") s) "hasPredicate"
+hasAntecedent :: String -> TLAVal
+hasAntecedent s = TApp (TApp (TVar "c") s) "hasAntecedent"
 
 -- State Helpers
 --Updates gets the current name for the counter and updates to the next one
@@ -281,12 +293,11 @@ main = do
     args <- getArgs
     form <- if null args then parseString =<< getContents else parseString =<< (readFile $ head args)
     putStrLn $ "VARIABLES hasEmittedCSV, " ++ c
+    let prop = compileProperty form
     putStrLn  "Property == "
-    putStrLn $ "    " ++ (show $ compileProperty form)
-    putStrLn  "Invariant == "
-    putStrLn $ "    " ++ (show $ propertyToCSVInvariant $ compileProperty form)
+    putStrLn $ "    " ++ (show $ prop)
     putStrLn  "NextP == "
-    putStrLn $ "    " ++ (show $ collateAssignments (c ++ "'") $ compileNext form)
+    putStrLn $ prettyPrintTForms $ propertyToCSVNext prop ++ (collateAssignments (c ++ "'") $ compileNext form)
     putStrLn  "InitP == "
-    putStrLn $ "    " ++ (show $ collateAssignments c $ compileInit form)
+    putStrLn $ prettyPrintTForms $ collateAssignments c $ compileInit form
     pure ()

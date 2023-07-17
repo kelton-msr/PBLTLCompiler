@@ -1,3 +1,4 @@
 *.o
 *.hi
 app/Main
+dist-newstyle

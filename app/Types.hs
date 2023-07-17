@@ -53,6 +53,10 @@ instance Show TLAForm where
     show (TEq l r)      = show l ++ " = "  ++ show r
     show (TVal t)       = show t
 
+prettyPrintTForms :: [TLAForm] -> String
+prettyPrintTForms fs = 
+     concatMap (\f -> ("    /\\ " ++ (show f) ++ "\n")) fs
+
 -- The distinction between value and formula is more to limit bugs while writing than something principled
 -- This could easily be moved into the TLAForm type later
 data TLAVal = TInt Int 
@@ -83,3 +87,4 @@ instance Show TLAVal where
     show (TString s) = "\"" ++ s ++ "\""
     show (TBool True)   = "TRUE"
     show (TBool False)  = "FALSE"
+

@@ -60,10 +60,10 @@ executable PBLTLCompiler
 
     -- Other library packages from which modules are imported.
     build-depends:    base >= 4,
-                      mtl  >=2.3,
-                      text >=2.0,
+                      mtl  >=2,
+                      text >=2,
                       containers >= 0.6,
-                      megaparsec >= 9.4
+                      megaparsec >= 9
 
     -- Directories containing source files.
     hs-source-dirs:   app
