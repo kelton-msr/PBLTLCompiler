@@ -3,6 +3,7 @@ import System.Environment (getArgs)
 import Text.Megaparsec (parse)
 import Types
 import Parser
+import Debug.Trace (trace)
 import Control.Monad.State.Strict
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -38,6 +39,8 @@ diamonds (LImplies f g) = diamonds f + diamonds g
 diamonds (LNeg f) = diamonds f
 diamonds (LOp _ f) = sum $ diamonds <$> f
 diamonds (LAtom _) = 0
+diamonds (LInt _) = 0
+diamonds (LBinOp l _ r) = diamonds l + diamonds r
 
 -- This repitition is bad and hacky. TODO.
 boxes :: LTLForm -> Int
@@ -48,6 +51,8 @@ boxes (LImplies f g) = boxes f + boxes g
 boxes (LNeg f) = boxes f
 boxes (LOp _ f) = sum $ boxes <$> f
 boxes (LAtom _) = 0
+boxes (LInt _) = 0
+boxes (LBinOp l _ r) = boxes l + boxes r
 
 -- Performs simplifications (that should all be tautological) of (PB)LTL formulas.
 -- Reduces the number of cases we need to account for in compilation.
@@ -69,12 +74,17 @@ simplify f = f
 -- assumes pre-simplified formula
 compileProperty' :: LTLForm -> CompM TLAForm
 compileProperty' (LNeg f) = TNeg <$> compileProperty' f
+compileProperty' (LInt i) = pure $ TVal $ TInt i
 compileProperty' (LAtom s) = pure $ TVal $ TVar s
 -- This Formula vs Val stuff is becoming more trouble than it's worth... a refactor would be wise, but for now it works.
 compileProperty' (LOp s fs) =  TVal <$> TOp s <$> (mapM ((TForm <$>) . compileProperty')  fs)
+compileProperty' (LBinOp l o r ) = do
+    l' <- compileProperty' l
+    r' <- compileProperty' r
+    pure $ (TBinOp (TForm $ l') o (TForm $ r'))
 compileProperty' (LImplies l (LDiamond n r)) = do
         m <- getAndUpdate
-        pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ condition m)
+        pure $ TBox $ (counter m `tleq` TInt n) `TOr` (TVal $ condition m)
 compileProperty' (LImplies l r) = do
         l' <- compileProperty' l
         r' <- compileProperty' r
@@ -86,7 +96,7 @@ compileProperty' (LAnd l r) = do
 -- don't need what's inside here, that gets used when determining how `condition m` gets updated in compileNext'
 compileProperty' (LDiamond n _) = do
     m <- getAndUpdate 
-    pure $ TBox $ (counter m `TLeq` TInt n) `TOr` (TVal $ condition m)
+    pure $ TBox $ (counter m `tleq` TInt n) `TOr` (TVal $ condition m)
 compileProperty' (LBox s) = do
     if diamonds s > 0
         then 
@@ -97,6 +107,8 @@ compileProperty' (LBox s) = do
 
 -- This feels too simple... probably something I'm missing...
 compileInit' :: LTLForm -> CompM [TLAForm]
+compileInit' (LBinOp _ _ _) = pure []
+compileInit' (LInt _)  = pure []
 compileInit' (LAtom _) = pure []
 compileInit' (LOp _ _) = pure []
 compileInit' (LNeg f) = compileInit' f
@@ -104,7 +116,8 @@ compileInit' (LAnd l r) = do
     l' <- compileInit' l
     r' <- compileInit' r
     pure $ l' ++ r'
-compileInit' (LBox (LImplies l r)) = do
+compileInit' (LBox (LImplies l r)) =
+   if diamonds l + diamonds r == 0 then pure [] else do
    name <- getCurrentName
    -- This will generate the incorrect names if `l` has a diamond for now. 
    l' <- compileInit' l 
@@ -138,6 +151,8 @@ compileInit' (LBox f) = compileInit' f
 compileNext' :: LTLForm -> CompM [TLAForm]
 compileNext' (LAtom _) = pure []
 compileNext' (LOp _ _) = pure []
+compileNext' (LInt _)  = pure []
+compileNext' (LBinOp _ _ _) = pure []
 -- Only case where this wouldn't work would be (Q => (<>(<=m)P/\<>(<=n)R)) or so, but this should have been transformed away in simplify.
 compileNext' (l `LAnd` r) = do 
     l' <- compileNext' l 
@@ -211,7 +226,7 @@ compileNext f = fst $ runState (compileNext' (simplify f)) (names (simplify f),0
 -- bug with boxes TODO
 -- hasEmitted nees to be specified in next, and init
 compileInit :: LTLForm -> [TLAForm]
-compileInit f = (TVar "hasEmittedCSV" `TEq` TBool False) : (fst $ runState (compileInit' (simplify f)) (names (simplify f),0))
+compileInit f = trace ("shit") $ (TVar "hasEmittedCSV" `TEq` TBool False) : (fst $ runState (compileInit' (simplify f)) (names (simplify f),0))
 
 
 -- should work for most properties. Won't work if there is more than just the one box on the outside. 

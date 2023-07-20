@@ -13,6 +13,7 @@ type Parser = Parsec String String
           |<>(<=Int)F
           |(F /\ F)
           |(F => F)
+          | (F (< | > | >= | <=) F)
           |opName(F?(, F)*)
           |varName
 -}
@@ -33,9 +34,11 @@ parseLTL =
     <|> parseDiamond
     <|> parseNeg
     <|> try parseAnd
+    <|> try parseBinOp
     <|> try parseImplies
     <|> try parseOp
     <|> parseVar
+    <|> parseInt
     <|> parens parseLTL 
 
 parseBox :: Parser LTLForm
@@ -59,6 +62,14 @@ parseAnd = do
     r <- parseLTL
     symbol ")"
     pure $ (l `LAnd` r)
+parseBinOp :: Parser LTLForm
+parseBinOp = do
+    symbol "("
+    l <- parseLTL
+    op <- choice (map symbol [">","<",">=","<=","="])
+    r <- parseLTL
+    symbol ")"
+    pure $ (LBinOp l op r)
 
 parseImplies :: Parser LTLForm
 parseImplies = do
@@ -71,6 +82,9 @@ parseImplies = do
 
 parseVar :: Parser LTLForm
 parseVar = LAtom <$> parseId
+
+parseInt :: Parser LTLForm
+parseInt = LInt <$> L.decimal
 
 parseOp :: Parser LTLForm
 parseOp = do

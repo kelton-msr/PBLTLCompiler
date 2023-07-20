@@ -17,8 +17,11 @@ data LTLForm = LBox LTLForm
              | LAnd LTLForm LTLForm 
              | LImplies LTLForm LTLForm 
              | LAtom String 
+             | LInt Int
              | LOp String [LTLForm]
+             | LBinOp LTLForm String LTLForm 
              | LNeg LTLForm
+
 
 instance Show LTLForm where
     show (LBox a)       = "□(" ++ show a ++ ")"
@@ -27,6 +30,8 @@ instance Show LTLForm where
     show (LImplies l r) = show l ++ " ⇒ " ++ show r
     show (LNeg f)       = "¬(" ++ show f ++ ")"
     show (LOp s fs)     = s ++ "(" ++ (concat $ intersperse "," $ map show fs) ++ ")"
+    show (LBinOp l o r) = "(" ++ show l ++ " " ++ o ++ " " ++ show r ++ ")" 
+    show (LInt i)       = show i
     show (LAtom s)      = s
 
 -- Primes will be represented at the var level for now.
@@ -37,9 +42,9 @@ data TLAForm = TBox TLAForm
              | TImplies TLAForm TLAForm 
              | TNeg TLAForm 
              | TEq TLAVal TLAVal 
-             | TLeq TLAVal TLAVal 
              | TOr TLAForm TLAForm 
              | TVal TLAVal 
+             | TBinOp TLAVal String TLAVal
     deriving Eq
 
 instance Show TLAForm where
@@ -49,9 +54,9 @@ instance Show TLAForm where
     show (TAnd l r)     = "(" ++ show l ++ " /\\ " ++ show r ++ ")"
     show (TOr l r)      = "(" ++ show l ++ " \\/ " ++ show r ++ ")"
     show (TImplies l r) = "(" ++ show l ++ " => "  ++ show r  ++ ")"
-    show (TLeq l r)     = show l ++ " <= "  ++ show r 
     show (TEq l r)      = show l ++ " = "  ++ show r
     show (TVal t)       = show t
+    show (TBinOp l o r) = "(" ++ show l ++ " " ++ o ++ " "  ++ show r ++ ")"
 
 prettyPrintTForms :: [TLAForm] -> String
 prettyPrintTForms fs = 
@@ -88,3 +93,5 @@ instance Show TLAVal where
     show (TBool True)   = "TRUE"
     show (TBool False)  = "FALSE"
 
+tleq :: TLAVal -> TLAVal -> TLAForm
+tleq l r = TBinOp l "<=" r
