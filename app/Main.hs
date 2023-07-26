@@ -226,7 +226,7 @@ compileNext f = fst $ runState (compileNext' (simplify f)) (names (simplify f),0
 -- bug with boxes TODO
 -- hasEmitted nees to be specified in next, and init
 compileInit :: LTLForm -> [TLAForm]
-compileInit f = trace ("shit") $ (TVar "hasEmittedCSV" `TEq` TBool False) : (fst $ runState (compileInit' (simplify f)) (names (simplify f),0))
+compileInit f = (TVar "hasEmittedCSV" `TEq` TBool False) : (fst $ runState (compileInit' (simplify f)) (names (simplify f),0))
 
 
 -- should work for most properties. Won't work if there is more than just the one box on the outside. 
