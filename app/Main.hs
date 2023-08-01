@@ -100,10 +100,12 @@ compileProperty' (LDiamond n _) = do
 compileProperty' (LBox s) = do
     if diamonds s > 0
         then 
+            --just ignore it? TODO this seems off
             compileProperty' s
         else do
+            n <- getAndUpdate
             r <- compileProperty' s
-            pure $ TBox r
+            pure $ TVal $ condition n
 
 -- This feels too simple... probably something I'm missing...
 compileInit' :: LTLForm -> CompM [TLAForm]
@@ -145,7 +147,11 @@ compileInit' (LDiamond _ f) = do
    r <- compileInit' f
    --TODO should this compilePartial advance the state?
    pure $ [condition name `TEq` (TForm $ compilePartialProperty f d), counter name `TEq` TInt 0] ++ r
-compileInit' (LBox f) = compileInit' f
+compileInit' (LBox f) = do
+    name <- getAndUpdate
+    d <- get
+    r <- compileInit' f
+    pure $ (condition name `TEq` (TForm $ compilePartialProperty f d)) : r
 
 -- I think this is where most of the complexity is...
 compileNext' :: LTLForm -> CompM [TLAForm]
@@ -187,7 +193,7 @@ compileNext' (LBox (l `LImplies` r)) = do
     let name = names !! i
     let q = compilePartialProperty l (names,i)
     l' <- compileNext' l
-    if diamonds r == 0
+    if diamonds r == 0 && boxes r == 0
         then do
             r' <- compileNext' r
             pure $ l' ++ r'
@@ -211,7 +217,10 @@ compileNext' (LBox (l `LImplies` r)) = do
 compileNext' (LNeg f) = compileNext' f
 compileNext' (LBox f) =
     if diamonds f == 0 
-       then pure []
+       then do
+           name <- getAndUpdate
+           (names,index) <- get
+           pure $ [condition name `TEq` TForm ((TVal $ condition name) `TAnd` compilePartialProperty f (names, index))]
        else compileNext' f
 
 
@@ -274,7 +283,7 @@ getCurrentName = get >>= \(ss,i) -> pure (ss !! i)
 -- dumb name generator for counter.
 -- Leads to terrible names, but is dead simple. Good enough for a prototype/MVP.
 names :: LTLForm -> [String]
-names f = take (diamonds f) $ iterate (++"prime") "temp"
+names f = take (diamonds f + boxes f) $ iterate (++"P") "temp"
 
 --test examples
 example :: LTLForm

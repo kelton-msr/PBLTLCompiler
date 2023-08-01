@@ -1,4 +1,4 @@
----------------------------- MODULE EWD998_stat -----------------------------
+----------------------- MODULE EWD998_opt_stat -----------------------------
 (***************************************************************************)
 (* TLA+ specification of an algorithm for distributed termination          *)
 (* detection on a ring, due to Shmuel Safra, published as EWD 998:         *)
@@ -86,7 +86,9 @@ PassToken(i) ==
   (* Rules 2 + 4 + 7 *)
   /\ ~ active[i] \* If machine i is active, keep the token.
   /\ token.pos = i
-  /\ token' = [pos |-> token.pos - 1,
+  \* If the current node is black, then we know this round is going to be inconclusive. 
+  \* maybe just reset then?
+  /\ token' = [pos |-> IF color[i] = "black" THEN 0 ELSE token.pos - 1,
                q |-> token.q + counter[i],
                color |-> IF color[i] = "black" THEN "black" ELSE token.color]
             \*    color |-> color[i] ]
@@ -200,10 +202,9 @@ TypedInv ==
 (***************************************************************************)
 (* Liveness property: termination is eventually detected.                  *)
 (***************************************************************************)
-\*Liveness ==
- \* Termination ~> terminationDetected
 Liveness ==
-    [](Termination  => <>[]terminationDetected)
+  Termination ~> terminationDetected
+
 (***************************************************************************)
 (* The algorithm implements the specification of termination detection     *)
 (* in a ring with asynchronous communication.                              *)
