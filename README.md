@@ -33,6 +33,11 @@ Check what these are (with `-h`) and change them if you want different guarantee
 WARNING: The algorithm to calculate single sampling plans is quite slow for strong guarantees! 
 Coming up with a faster on is on my TODO list, but as it stands it may take a (very very) long time strong guarantees.
 
+If there's a corresponding `.cfg` file for the TLA+ module you specify, then the transpiler will automatically create an updated version for the statistical verification module.
+
+NOTE: Currently this just does a simple find and replace, which might affect other parts of the cfg file. 
+Doing things "the right way" would require writing a TLC config file parser, which on the roadmap.
+
 You can then run the emitted TLA+ specification with TLC's simulation mode, setting `num=n`.
 This will create a file (called `statPropRes.csv` by default), which contains information about simulation results.
 You can then either invoke the binary again with the correct flag, or just manually check that number of lines in the statistics file is less than `n-c-1`.

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 module Parser where
 import Types
@@ -7,7 +6,9 @@ import Text.Megaparsec.Char
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 import Compiler
+--- TODO come up with a better name that avoids collisions with opt-parse
 type LTLParser = Parsec String String
+type CFGParser = Parsec String String
 {-
     The grammar is basically 
     F ::=  []F
@@ -114,4 +115,3 @@ parseOp = do
       Nothing -> do 
           symbol ")" 
           pure $ LOp id []
-
