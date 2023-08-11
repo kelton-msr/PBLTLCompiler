@@ -5,7 +5,6 @@ import Types
 import Debug.Trace (trace)
 import qualified Data.Map.Strict as Map
 
-
 -- things that ought be arguments soon
 csvFile :: String
 csvFile = "statPropsRes.csv"
@@ -294,3 +293,43 @@ getCurrentName = get >>= \(ss,i) -> pure (ss !! i)
 names :: LTLForm -> [String]
 names f = take (diamonds f + boxes f) $ iterate (++"P") "temp"
 
+
+-- lots of ineffecient appends here. Really small amount of data so it should be fine, 
+-- but we can move to Seq if it becomes a problem
+genModule :: String -> String -> String -> LTLForm -> String
+genModule modName baseModName varsName f =
+    foldr1 (++) [
+                  modDef,
+                  extends,
+                  statVars,
+                  instDecl,
+                  newVars,
+                  "NewStatisticalNext ==\n",
+                  prettyPrintTForms $ (TVal $ TVar (inst ++ "!Next")) : 
+                        propertyToCSVNext prop ++ (collateAssignments (c ++ "'") $ compileNext f),
+                  "NewStatisticalInit ==\n",
+                  prettyPrintTForms $ (TVal $ TVar (inst ++ "!Init")) : (collateAssignments c $ compileInit f),
+                  spec,
+                  "=========================="
+                 ]
+        where
+            prop = compileProperty f
+            modDef = "---------- MODULE " ++ modName ++ " ----------\n"
+            extends = "EXTENDS Integers, CSV, " ++ baseModName ++ "\n"
+            statVars = "VARIABLES c, isViolated\n"
+            inst = "OldModuleInstance"
+            instDecl = inst ++ " == INSTANCE " ++ baseModName ++ "\n"
+            --Intentionally verbose names to minimize name collisions
+            newVars = "extendedStatisticalVars == <<c,isViolated," ++ varsName ++">>" ++ "\n"
+             -- TODO should be able to specifiy (or ideally read from spec) what WF_varsName is applied to 
+            spec = "NewStatisticalSpec == NewStatisticalInit /\\ [][NewStatisticalNext]_extendedStatisticalVars /\\ WF_extendedStatisticalVars(NewStatisticalNext)\n"
+    -- putStrLn $ "VARIABLES isViolated, " ++ c
+    -- let prop = compileProperty form
+    -- putStrLn  "NextP == "
+    -- putStrLn $ prettyPrintTForms $ propertyToCSVNext prop ++ (collateAssignments (c ++ "'") $ compileNext form)
+    -- putStrLn  "InitP == "
+    -- putStrLn $ prettyPrintTForms $ collateAssignments c $ compileInit form
+    -- putStrLn "\\* Note that we cannot use this property for verifcation due to a bug in TLC"
+    -- putStrLn  "Property == "
+    -- putStrLn $ "    " ++ (show $ prop)
+    -- pure ()

@@ -7,47 +7,60 @@ import Compiler
 import Options.Applicative 
 
 -- options parsing stuff
-data CmdOptions = 
+data PropOptions = 
     FileInput String
       | ArgInput String
 
-fileInput :: Parser CmdOptions 
+data CmdOptions = 
+    CmdOpt { fileOpts  :: PropOptions,
+      inModule  :: String,
+      outModule :: String }
+
+
+cmdOpts :: Parser CmdOptions
+cmdOpts = CmdOpt
+    <$> propertyInput 
+    <*> strOption 
+         (  long "input"
+         <> short 'i'
+         <> metavar "TLA-MODULE"
+         <> help "The base module you want to verify statistical properties of" )
+    <*> strOption 
+         (  long "output"
+         <> short 'o'
+         <> metavar "TLA-MODULE"
+         <> help "The name of the module" )
+
+fileInput :: Parser PropOptions 
 fileInput = FileInput <$> (strOption
   (  long "file"
   <> short 'f'
   <> metavar "FILENAME"
   <> help "A file containing the PBLTL property you want to verify" ))
 
-argInput :: Parser CmdOptions
+argInput :: Parser PropOptions
 argInput = ArgInput <$> (argument str
     (  metavar "\"PBLTL-PROPERTY\""
     <> help "A string containing the PBLTL property you want to verify"
     ))
 
-input :: Parser CmdOptions 
-input = fileInput <|> argInput
+propertyInput :: Parser PropOptions 
+propertyInput = fileInput <|> argInput
 
-opts :: ParserInfo CmdOptions
-opts = info (input <**> helper)
+opts :: ParserInfo CmdOptions 
+opts = info (cmdOpts <**> helper)
   ( fullDesc
   <> header "pbltlc - A transpiler from Probabalistic Bounded Linear Temporal Logic (of actions) to TLA+" )
 
 main :: IO ()
 main = do
     options <- execParser opts
-    form <- case options of
+    form <- case fileOpts options of
                  FileInput s -> parseString =<< (readFile s)
                  ArgInput s  -> parseString s
-    putStrLn $ "VARIABLES isViolated, " ++ c
-    let prop = compileProperty form
-    putStrLn  "NextP == "
-    putStrLn $ prettyPrintTForms $ propertyToCSVNext prop ++ (collateAssignments (c ++ "'") $ compileNext form)
-    putStrLn  "InitP == "
-    putStrLn $ prettyPrintTForms $ collateAssignments c $ compileInit form
-    putStrLn "\\* Note that we cannot use this property for verifcation due to a bug in TLC"
-    putStrLn  "Property == "
-    putStrLn $ "    " ++ (show $ prop)
-    pure ()
+
+    writeFile ((outModule options) ++ ".tla") 
+        $ genModule (outModule options) (inModule options) "vars" form
 
 --- examples
 example :: LTLForm

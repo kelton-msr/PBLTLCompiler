@@ -23,12 +23,13 @@ VARIABLES
  color,      \* color of nodes
  \* @type: Int -> Int;
  counter,    \* nb of sent messages - nb of rcvd messages per node
+ round,
  \* @type: Int -> Int;
  pending,    \* nb of messages in transit to node
  \* @type: [ pos: Int, q: Int, color: Str ];
  token       \* token structure
   
-vars == <<active, color, counter, pending, token>>
+vars == <<active, color, counter, pending, token,round>>
 
 TypeOK ==
   /\ active \in [Node -> BOOLEAN]
@@ -37,6 +38,18 @@ TypeOK ==
   /\ pending \in [Node -> Nat]
   /\ token \in Token
 ------------------------------------------------------------------------------
+(***************************************************************************)
+(* Sum of the values f[x], for x \in S \subseteq DOMAIN f.                 *)
+(***************************************************************************)
+Sum(f, S) == FoldFunctionOnSet(+, 0, f, S)
+
+(***************************************************************************)
+(* The number of messages on their way. "in-flight"                        *)
+(***************************************************************************)
+B == Sum(pending, Node)
+Termination == 
+  /\ \A i \in Node : ~ active[i]
+  /\ B = 0
  
 Init ==
   (* EWD840 but nodes *) 
@@ -46,9 +59,11 @@ Init ==
   /\ counter = [i \in Node |-> 0] \* c properly initialized
   /\ pending = [i \in Node |-> 0]
   /\ token \in [ pos: {0}, q: {0}, color: {"black"} ]
+  /\ round = 0
 
 InitiateProbe ==
   (* Rules 1 + 5 + 6 *)
+  /\ round' = IF ~Termination THEN 0 ELSE round + 1
   /\ token.pos = 0
   /\ \* previous round not conclusive if:
      \/ token.color = "black"
@@ -69,7 +84,7 @@ PassToken(i) ==
             \*    color |-> color[i] ]
   /\ color' = [ color EXCEPT ![i] = "white" ]
   \* The state of the nodes remains unchanged by token-related actions.
-  /\ UNCHANGED <<active, counter, pending>>
+  /\ UNCHANGED <<active, counter, pending, round>>
 
 System == \/ InitiateProbe
           \/ \E i \in Node \ {0} : PassToken(i)
@@ -85,7 +100,7 @@ SendMsg(i) ==
   /\ \E j \in Node \ {i} : pending' = [pending EXCEPT ![j] = @ + 1]
           \* Note that we don't blacken node i as in EWD840 if node i
           \* sends a message to node j with j > i
-  /\ UNCHANGED <<active, color, token>>
+  /\ UNCHANGED <<active, color, token,round>>
 
 RecvMsg(i) ==
   /\ pending[i] > 0
@@ -96,19 +111,19 @@ RecvMsg(i) ==
   /\ color' = [ color EXCEPT ![i] = "black" ]
   \* Receipt of a message activates i.
   /\ active' = [ active EXCEPT ![i] = TRUE ]
-  /\ UNCHANGED <<token>>                           
+  /\ UNCHANGED <<token,round>>                           
 
 Deactivate(i) ==
   /\ active[i]
   /\ active' = [active EXCEPT ![i] = FALSE]
-  /\ UNCHANGED <<color, counter, pending, token>>
+  /\ UNCHANGED <<color, counter, pending, token,round>>
 
 Environment == \E i \in Node : SendMsg(i) \/ RecvMsg(i) \/ Deactivate(i)
 
 -----------------------------------------------------------------------------
 
 Next ==
-  System \/ Environment
+  /\ (System \/ Environment)
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(System)
 
@@ -134,23 +149,11 @@ terminationDetected ==
   /\ color[0] = "white"
   /\ ~ active[0]
 
-(***************************************************************************)
-(* Sum of the values f[x], for x \in S \subseteq DOMAIN f.                 *)
-(***************************************************************************)
-Sum(f, S) == FoldFunctionOnSet(+, 0, f, S)
-
-(***************************************************************************)
-(* The number of messages on their way. "in-flight"                        *)
-(***************************************************************************)
-B == Sum(pending, Node)
 
 (***************************************************************************)
 (* The system has terminated if no node is active and there are no         *)
 (* in-flight messages.                                                     *)
 (***************************************************************************)
-Termination == 
-  /\ \A i \in Node : ~ active[i]
-  /\ B = 0
 
 TerminationDetection ==
   terminationDetected => Termination
@@ -200,6 +203,7 @@ Liveness ==
 (* by the symbols of the same name of the present module.                  *)
 (***************************************************************************)
 TD == INSTANCE AsyncTerminationDetection
+
 
 TDSpec == TD!Spec
 

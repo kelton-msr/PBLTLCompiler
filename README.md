@@ -5,7 +5,8 @@
 
 PBLTL looks like the following:
 
-```S ::= Pr(>=P)(F) | F
+```
+S ::= Pr(>=P)(F) | F
 
 F ::= []F | <>(<=N)F | ~F | (F /\ F) | (F => F) | (A variable) | (An operator)
 ```
@@ -14,6 +15,7 @@ F ::= []F | <>(<=N)F | ~F | (F /\ F) | (F => F) | (A variable) | (An operator)
 Where:
 
 Pr(>=P)(F) represents the proposition that property F holds at least with probability P (for 0 <= P <= 1).
+
 <>(<=N)F represents a "bounded eventually," which expresses the property that F will hold within N time steps.
 [] works as expected in temporal logic.
 
@@ -44,7 +46,7 @@ The simulation results will contain the total number of violations of the proper
 Say you want to verify that a termination detection algorithm (specifically EWD998, as seen in the examples folder) works within 7 time steps with 90% probability.
 To verify this, you would first run:
 
-`pbltlc "Pr(>=.9)([](Termination => <>(<=7) terminationDetected))" -i EWD998.tla  -o EWD998_stat.tla`
+`pbltlc "Pr(>=.9)([](Termination => <>(<=7) terminationDetected))" -i EWD998 -o EWD998_stat`
 
 Which will then emit a new spec to `EWD998_stat.tla`, and output the following to standard out:
 
