@@ -13,7 +13,8 @@ type CompM a = State ([String],Int) a
 -- Would probably not be a huge deal to add unbounded diamonds, but lets keep it simple for now.
 -- Probably need to add some sort of operators syntax here to deal with TLA+ things.
 data LTLForm = LBox LTLForm 
-             | LDiamond Int LTLForm 
+             | LBDiamond Int LTLForm 
+             | LDiamond LTLForm
              | LAnd LTLForm LTLForm 
              | LImplies LTLForm LTLForm 
              | LAtom String 
@@ -24,15 +25,16 @@ data LTLForm = LBox LTLForm
 
 
 instance Show LTLForm where
-    show (LBox a)       = "□(" ++ show a ++ ")"
-    show (LDiamond n a) = "◇≤" ++ show n ++ "("     ++ show a ++ ")"
-    show (LAnd l r)     = show l ++ " ∧ " ++ show r
-    show (LImplies l r) = show l ++ " ⇒ " ++ show r
-    show (LNeg f)       = "¬(" ++ show f ++ ")"
-    show (LOp s fs)     = s ++ "(" ++ (concat $ intersperse "," $ map show fs) ++ ")"
-    show (LBinOp l o r) = "(" ++ show l ++ " " ++ o ++ " " ++ show r ++ ")" 
-    show (LInt i)       = show i
-    show (LAtom s)      = s
+    show (LBox a)        = "□(" ++ show a ++ ")"
+    show (LBDiamond n a) = "◇≤" ++ show n ++ "("     ++ show a ++ ")"
+    show (LDiamond a)    = "◇" ++"("     ++ show a ++ ")"
+    show (LAnd l r)      = show l ++ " ∧ " ++ show r
+    show (LImplies l r)  = show l ++ " ⇒ " ++ show r
+    show (LNeg f)        = "¬(" ++ show f ++ ")"
+    show (LOp s fs)      = s ++ "(" ++ (concat $ intersperse "," $ map show fs) ++ ")"
+    show (LBinOp l o r)  = "(" ++ show l ++ " " ++ o ++ " " ++ show r ++ ")" 
+    show (LInt i)        = show i
+    show (LAtom s)       = s
 
 -- Primes will be represented at the var level for now.
 -- internal syntactic representation for (a subset of) TLA+ formulas

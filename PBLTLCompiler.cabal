@@ -46,14 +46,14 @@ maintainer:         kelton@keltono.net
 category:           Language
 
 -- Extra files to be distributed with the package, such as examples or a README.
-extra-source-files: CHANGELOG.md
+extra-source-files: README.md 
 
 executable PBLTLCompiler
     -- .hs or .lhs file containing the Main module.
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules: Parser, Types
+    other-modules: Compiler, Parser, Types, Stats
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -63,7 +63,8 @@ executable PBLTLCompiler
                       mtl  >=2,
                       text >=2,
                       containers >= 0.6,
-                      megaparsec >= 9
+                      megaparsec >= 9,
+                      optparse-applicative >= 0.18
 
     -- Directories containing source files.
     hs-source-dirs:   app

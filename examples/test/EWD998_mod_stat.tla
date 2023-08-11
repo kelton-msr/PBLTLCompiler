@@ -16,7 +16,7 @@ cond == c["temp"]["counter"] > 3
 FNext == 
     /\ Foo!Next
     /\ c' = [temp|-> [condition|-> (c["temp"]["condition"] \/ Foo!terminationDetected), counter|-> (IF ~(c["temp"]["hasAntecedent"]) THEN 0 ELSE (IF (c["temp"]["condition"] /\ Foo!Termination) THEN 1 ELSE (c["temp"]["counter"] + 1))), hasAntecedent|-> (c["temp"]["hasAntecedent"] \/ Foo!Termination)]]
-    /\ hasEmittedCSV' = ~(((c["temp"]["counter"] <= 8) \/ c["temp"]["condition"]))
+    /\ hasEmittedCSV' = ~(((c'["temp"]["counter"] <= 8) \/ c'["temp"]["condition"]))
     /\ (IF (hasEmittedCSV' /\ ~(hasEmittedCSV)) THEN CSVWrite("%1$s", <<TRUE>>, "statPropsRes.csv") ELSE TRUE)
 
 FInit ==

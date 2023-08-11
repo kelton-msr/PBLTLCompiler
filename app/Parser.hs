@@ -6,33 +6,43 @@ import Data.Text (Text)
 import Text.Megaparsec.Char
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
-type Parser = Parsec String String
+import Compiler
+type LTLParser = Parsec String String
 {-
     The grammar is basically 
     F ::=  []F
           |<>(<=Int)F
+          |<>F
           |(F /\ F)
           |(F => F)
           | (F (< | > | >= | <=) F)
           |opName(F?(, F)*)
           |varName
 -}
+    
+parseString :: String -> IO LTLForm
+parseString input = 
+    case parse parseLTL "(PBLTL formula)" input of
+      --These error messages are borderline worthless. I think megaparsec has a way to improve them. TODO.
+      Left e -> ioError (userError $ "failed to parse with error: " ++ show e)
+      Right f -> pure f
 
-symbol :: String -> Parser String
+symbol :: String -> LTLParser String
 symbol = L.symbol space
 
-parseId :: Parser String 
+parseId :: LTLParser String 
 parseId =  L.lexeme space
   ((:) <$> letterChar <*> many alphaNumChar <?> "variable")
 
-parens :: Parser a -> Parser a
+parens :: LTLParser a -> LTLParser a
 parens = between (L.symbol space "(") (L.symbol space ")")
 
-parseLTL :: Parser LTLForm
+parseLTL :: LTLParser LTLForm
 parseLTL =
     parseBox 
-    <|> parseDiamond
     <|> parseNeg
+    <|> try parseBDiamond
+    <|> try parseDiamond
     <|> try parseAnd
     <|> try parseBinOp
     <|> try parseImplies
@@ -41,20 +51,25 @@ parseLTL =
     <|> parseInt
     <|> parens parseLTL 
 
-parseBox :: Parser LTLForm
+parseBox :: LTLParser LTLForm
 parseBox = L.symbol space "[]" >> LBox <$> parseLTL
 
-parseNeg :: Parser LTLForm
+parseNeg :: LTLParser LTLForm
 parseNeg = L.symbol space "~" >> LNeg <$> parseLTL
 
-parseDiamond :: Parser LTLForm
+parseDiamond :: LTLParser LTLForm
 parseDiamond = do
+    L.symbol space "<>"
+    f <- parseLTL
+    pure $ LDiamond f
+parseBDiamond :: LTLParser LTLForm
+parseBDiamond = do
     L.symbol space "<>"
     n <- parens (L.symbol space "<=" >> L.decimal)
     f <- parseLTL
-    pure $ LDiamond n f
+    pure $ LBDiamond n f
 
-parseAnd :: Parser LTLForm
+parseAnd :: LTLParser LTLForm
 parseAnd = do
     symbol "("
     l <- parseLTL
@@ -62,7 +77,7 @@ parseAnd = do
     r <- parseLTL
     symbol ")"
     pure $ (l `LAnd` r)
-parseBinOp :: Parser LTLForm
+parseBinOp :: LTLParser LTLForm
 parseBinOp = do
     symbol "("
     l <- parseLTL
@@ -71,7 +86,7 @@ parseBinOp = do
     symbol ")"
     pure $ (LBinOp l op r)
 
-parseImplies :: Parser LTLForm
+parseImplies :: LTLParser LTLForm
 parseImplies = do
     symbol "("
     l <- parseLTL
@@ -80,13 +95,13 @@ parseImplies = do
     symbol ")"
     pure $ (l `LImplies` r)
 
-parseVar :: Parser LTLForm
+parseVar :: LTLParser LTLForm
 parseVar = LAtom <$> parseId
 
-parseInt :: Parser LTLForm
+parseInt :: LTLParser LTLForm
 parseInt = LInt <$> L.decimal
 
-parseOp :: Parser LTLForm
+parseOp :: LTLParser LTLForm
 parseOp = do
     id <- parseId
     symbol "("
@@ -99,3 +114,4 @@ parseOp = do
       Nothing -> do 
           symbol ")" 
           pure $ LOp id []
+
