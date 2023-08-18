@@ -22,6 +22,7 @@ data LTLForm = LBox LTLForm
              | LOp String [LTLForm]
              | LBinOp LTLForm String LTLForm 
              | LNeg LTLForm
+             deriving Eq
 
 
 instance Show LTLForm where
@@ -35,6 +36,12 @@ instance Show LTLForm where
     show (LBinOp l o r)  = "(" ++ show l ++ " " ++ o ++ " " ++ show r ++ ")" 
     show (LInt i)        = show i
     show (LAtom s)       = s
+
+data PLTLForm = Pr Double LTLForm 
+    deriving Eq
+
+instance Show PLTLForm where
+    show (Pr d f) = "Pr(>="++show d ++ ")(" ++ show f ++ ")"
 
 -- Primes will be represented at the var level for now.
 -- internal syntactic representation for (a subset of) TLA+ formulas

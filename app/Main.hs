@@ -5,6 +5,7 @@ import Text.Megaparsec (parse)
 import Types
 import Parser
 import Compiler
+import Stats
 import Options.Applicative 
 import Data.Text (replace)
 import Control.Exception (try, IOException)
@@ -23,22 +24,11 @@ data CmdOptions =
     CmdOpt { 
             propOpts  :: PropOptions,
             inModule  :: String,
-            outModule :: String 
+            outModule :: String,
+            delta     :: Double,
+            alpha     :: Double,
+            beta      :: Double
            }
-
-cmdOpts :: Parser CmdOptions
-cmdOpts = CmdOpt
-    <$> propertyInput 
-    <*> strOption 
-         (  long "input"
-         <> short 'i'
-         <> metavar "TLA-MODULE"
-         <> help "The base module you want to verify statistical properties of" )
-    <*> strOption 
-         (  long "output"
-         <> short 'o'
-         <> metavar "TLA-MODULE"
-         <> help "The name of the module" )
 
 fileInput :: Parser PropOptions 
 fileInput = FileInput <$> (strOption
@@ -56,6 +46,39 @@ argInput = ArgInput <$> (argument str
 propertyInput :: Parser PropOptions 
 propertyInput = fileInput <|> argInput
 
+cmdOpts :: Parser CmdOptions
+cmdOpts = CmdOpt
+    <$> propertyInput 
+    <*> strOption 
+         (  long "input"
+         <> short 'i'
+         <> metavar "TLA-MODULE"
+         <> help "The base module you want to verify statistical properties of" )
+    <*> strOption 
+         (  long "output"
+         <> short 'o'
+         <> metavar "TLA-MODULE"
+         <> help "The name of the module" )
+    <*> option auto
+         (  long "delta"
+         <> short 'd'
+         <> metavar "PROBABILITY"
+         <> help "The range of indifference for the sampling plan"
+         <> value 0.005 )
+    <*> option auto
+         (  long "alpha"
+         <> short 'a'
+         <> metavar "PROBABILITY"
+         <> help "The acceptable likelihood of false positive for the sampling plan"
+         <> value 0.001 )
+    <*> option auto
+         (  long "beta"
+         <> short 'b'
+         <> metavar "PROBABILITY"
+         <> help "The acceptable likelihood of false positive for the sampling plan"
+         <> value 0.001 )
+
+
 opts :: ParserInfo CmdOptions 
 opts = info (cmdOpts <**> helper)
   ( fullDesc
@@ -68,10 +91,18 @@ tryToReadFile s = try $ TIO.readFile s
 main :: IO ()
 main = do
     options <- execParser opts
-    form <- case propOpts options of
+    formOpt <- case propOpts options of
                  FileInput s -> parseString =<< (readFile s)
                  ArgInput s  -> parseString s
-
+    putStrLn $ "Parsed: " ++ show formOpt 
+    let form = case formOpt of
+                 Left (Pr _ f) -> f
+                 Right f       -> f
+    case formOpt of
+        Left (Pr p f) -> do
+            putStrLn "Single Sampling Plan (required runs,required acceptances):"
+            print (samplingPlan (p - (delta options)) (p + (delta options)) (alpha options) (beta options))
+        Right _       -> pure ()
     writeFile ((outModule options) ++ ".tla") 
         $ genModule (outModule options) (inModule options) "vars" form
     cfg' <- tryToReadFile ((inModule options) ++ ".cfg")

@@ -21,9 +21,9 @@ type CFGParser = Parsec String String
           |varName
 -}
     
-parseString :: String -> IO LTLForm
+parseString :: String -> IO (Either PLTLForm LTLForm)
 parseString input = 
-    case parse parseLTL "(PBLTL formula)" input of
+    case parse parseFormula "(PBLTL formula)" input of
       --These error messages are borderline worthless. I think megaparsec has a way to improve them. TODO.
       Left e -> ioError (userError $ "failed to parse with error: " ++ show e)
       Right f -> pure f
@@ -51,6 +51,17 @@ parseLTL =
     <|> parseVar
     <|> parseInt
     <|> parens parseLTL 
+
+parseFormula :: LTLParser (Either PLTLForm LTLForm)
+parseFormula = (Left <$> try parsePLTL) <|> (Right <$> parseLTL)
+
+parsePLTL :: LTLParser PLTLForm
+parsePLTL = do 
+    L.symbol space "Pr(>="
+    p <- L.float 
+    L.symbol space ")"
+    f <- parseLTL
+    pure $ Pr p f
 
 parseBox :: LTLParser LTLForm
 parseBox = L.symbol space "[]" >> LBox <$> parseLTL
